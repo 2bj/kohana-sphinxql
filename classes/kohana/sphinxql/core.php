@@ -31,10 +31,18 @@ class Kohana_SphinxQL_Core {
 	 * @param string The profile name, corresponds to the config file
 	 * @param array Config settings to override defaults
 	 */
-	public function __construct($profile='default', array $config=null) {
-		if ($config === null) { $config = array(); }
+	public function __construct($profile = 'default', array $config = NULL)
+	{
+		if ($config === NULL)
+		{
+		    $config = array();
+		}
 		$config = Arr::merge(Kohana::config('sphinxql.'.$profile), $config);
-		foreach ($config['servers'] as $name => $server) { $this->add_server($name, $server); }
+		
+		foreach ($config['servers'] as $name => $server)
+		{
+		    $this->add_server($name, $server);
+		}
 	}
 
 	/**
@@ -44,13 +52,22 @@ class Kohana_SphinxQL_Core {
 	 * @param string The address and port of a server
 	 * @return boolean The status of the creation of the SphinxQL_Client
 	 */
-	public function add_server($name, $server) {
-		if (is_string($server)) {
-			if (isset(self::$_handles[$server])) { return true; }
-			if ($client = new SphinxQL_Client($server)) { self::$_handles[$name] = $client; return true; }
+	public function add_server($name, $server)
+	{
+		if (is_string($server))
+		{
+			if (isset(self::$_handles[$server]))
+			{
+			    return TRUE;
+			}
+			if ($client = new SphinxQL_Client($server))
+			{
+			    self::$_handles[$name] = $client;
+			    return TRUE;
+			}
 		}
 
-		return false;
+		return FALSE;
 	}
 
 	/**
@@ -58,9 +75,14 @@ class Kohana_SphinxQL_Core {
 	 *
 	 * @return SphinxQL_Query|false The resulting query or false on error
 	 */
-	public function new_query() {
-		if ($query = new SphinxQL_Query($this)) { return $query; }
-		return false;
+	public function new_query()
+	{
+		if ($query = new SphinxQL_Query($this))
+		{
+		    return $query;
+		}
+		
+		return FALSE;
 	}
 
 	/**
@@ -71,15 +93,63 @@ class Kohana_SphinxQL_Core {
 	 * @param SphinxQL_Query|string A query as a string or a SphinxQL_Query object
 	 * @return array|false The result of the query or false
 	 */
-	public function query($query) {
-		if (!is_a($query, 'SphinxQL_Query') && !is_string($query)) { return false; }
-		while (($names = array_keys(self::$_handles)) && count($names) && ($name = $names[intval(rand(0, count($names)-1))])) {
-			$client = self::$_handles[$name];
-			$return = $client->query((string)$query)->fetch_all();
-			if (is_array($return)) { return $return; } else { unset(self::$_handles[$name]); }
+	public function query($query)
+	{
+		if (!is_a($query, 'SphinxQL_Query') AND !is_string($query))
+		{
+		    return FALSE;
 		}
-		return false;
+		
+		while (($names = array_keys(self::$_handles)) AND 
+		        count($names) AND ($name = $names[intval(rand(0, count($names)-1))]))
+	    {
+			$client = self::$_handles[$name];
+			
+			$return = $client->query( (string) $query)->fetch_all();
+			
+			if (is_array($return))
+			{
+			    $info = $client->query('SHOW META')->fetch_all();
+			    
+			    $result = array();
+			    foreach($info as $info_row)
+			    {
+			        // parse META info (http://www.sphinxsearch.com/docs/current.html#sphinxql-show-meta)
+			        preg_match('/^(keyword|docs|hits)\[(\d)\]$/', $info_row['Variable_name'], $matches);
+			        
+			        if (isset($matches[1]))
+			        {
+			            switch($matches[1])
+			            {
+			                case 'keyword':
+			                    $result['words'][$info_row['Value']] = array();
+			                    $last_word = $info_row['Value'];
+			                break;
+			                case 'hits':
+			                    $result['words'][$last_word]['hits'] = $info_row['Value'];
+			                break;
+			                case 'docs':
+			                    $result['words'][$last_word]['docs'] = $info_row['Value'];
+			                break;
+			            }   
+			        }
+			        else
+			        {
+			            $result[$info_row['Variable_name']] = $info_row['Value'];
+			        }
+			    }
+			    
+			    $result['matches'] = $return;
+			    
+			    return $result;
+			}
+			else
+			{
+			    unset(self::$_handles[$name]);
+			}
+		}
+		
+		return FALSE;
 	}
 }
 
-?>
